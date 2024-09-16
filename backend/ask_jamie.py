@@ -6,6 +6,12 @@ from collections import defaultdict
 import requests
 from bs4 import BeautifulSoup
 
+
+"""
+This script is no longer required or in use
+but will remain in the project for archiving and referencing if needed.
+"""
+
 if __name__ == '__main__':
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--test_questions", type=str, help="Path to newline separated questions stored in txt file")

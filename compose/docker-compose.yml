@@ -1,0 +1,69 @@
+version: "3.1"
+
+services:
+  ##################
+  # Node Container
+  ##################
+  backend:
+    image: demonicmushy/chatbotplatform:server
+    build:
+      context: ../backend
+    environment:
+      - MICL_ENDPOINT=http://13.76.152.232:8081
+      - SPEECH_API=wss://gateway.speechlab.sg/client/ws/speech
+      - SPEECH_HTTP_API=http://40.90.170.182:8001/client/dynamic/recognize
+      - SPEECH_HTTP_AUTH=https://gateway.speechlab.sg/auth
+      - DIALOGFLOW_KEYFILENAME_COVID19=/run/secrets/dialog_covid19
+      - DIALOGFLOW_KEYFILENAME_BABYBONUS=/run/secrets/dialog_babybonus
+      - RAJAT_ENDPOINT_BABYBONUS=http://13.76.152.232:1995
+      - RAJAT_ENDPOINT_COVID19=http://13.76.152.232:2995
+      - RUSHI_ENDPOINT=http://13.76.152.232:1996
+      - BANI_ENDPOINT=http://13.76.152.232:1997
+      - AISG_CREDENTIALS=/run/secrets/aisg_credentials
+      - DB_HOST=mongo
+      - DB_PORT=27017
+      - DB_NAME=faqdatastore
+    ports:
+      # HTTPS server port : server listening port
+      - '3002:3001'
+    deploy:
+      replicas: 1
+    secrets:
+      - dialog_babybonus
+      - dialog_covid19
+      - aisg_credentials
+
+  ##################
+  # Client Container
+  ##################
+  client:
+    image: demonicmushy/chatbotplatform:client
+    build:
+      context: ../frontend
+      args:
+        # need to specify here because it will be complied into image
+        - REACT_APP_API=http://localhost:3001
+        # - REACT_APP_API=https://chatbot.speechlab.sg:3001
+    ports:
+      - "3000:80"
+    deploy:
+      replicas: 1
+
+  ################
+  # Mongo Database
+  ################
+  mongo:
+    image: mongo
+    volumes:
+      - faqdata:/data/db
+
+secrets:
+  dialog_babybonus:
+    external: true
+  dialog_covid19:
+    external: true
+  aisg_credentials:
+    external: true
+
+volumes:
+  faqdata:

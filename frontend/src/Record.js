@@ -1,7 +1,7 @@
-import React, { Component } from 'react'
-import './Record.css'
+import React from 'react'
 import './recorder'
 import axios from 'axios'
+import io from 'socket.io-client'
 import Button from '@material-ui/core/Button';
 import ButtonGroup from '@material-ui/core/ButtonGroup';
 import TextField from '@material-ui/core/TextField';
@@ -13,414 +13,290 @@ import LinearProgress from '@material-ui/core/LinearProgress';
 import Typography from '@material-ui/core/Typography';
 import Grid from '@material-ui/core/Grid'
 
+export default function Record(props) {
 
-const textField={width:'auto'};
-const buttonStyle={width:'50%'}
+  const [socket, setSocket] = React.useState(null)
+  const [browserSupported, setBrowserSupported] = React.useState(true)
+  const [audioRecorder, setAudioRecorder] = React.useState(null)
 
-export default class Record extends Component {
-  constructor (props) {
-    super(props)
-    this.state = {
-      browserSupported: true,
-      recorder: {},
-      recordInterval: 0,
-      isRecording: false,
-      service: '',
-      start: false
-    }
-    this.handleChange = this.handleChange.bind(this);
-    this.sendTranscription = this.sendTranscription.bind(this);
-  }
+  const [recordInterval, setRecordInterval] = React.useState(null)
+  const [recordTimeout, setRecordTimeout] = React.useState(null)
 
-  async componentDidMount () {
-    await this.recorderWithoutCanvas()
+  const [isRecording, setIsRecording] = React.useState(false)
+  const [service, setService] = React.useState("")
 
-    // this.props.socket.on('stream-close', () => {
-    //  this.cancel()
-    // })
-  }
+  const [transcriptionAISG, setTranscriptionAISG] = React.useState("")
+  const [transcriptionGoogle, setTranscriptionGoogle] = React.useState("")
+  const [partialResultAISG, setPartialResultAISG] = React.useState("")
+  const [partialResultGoogle, setPartialResultGoogle] = React.useState("")
+  const [isStreamOpenAISG, setIsStreamOpenAISG] = React.useState(false)
+  const [isStreamOpenGoogle, setIsStreamOpenGoogle] = React.useState(false)
 
-  componentWillUnmount() {
-    // cancel recorder from browser
-    // window.cancelAnimationFrame(this.drawVisual)
-    if (this.state.browserSupported){
-      const track = this.mediaStream.getTracks()[0]
-      track.stop()
-      // Closes the audio context, releasing any system audio resources that it uses.
-      this.audioCtx.close()
-      this.cancel() // cancel stream
-    }
-  }
+  React.useEffect( () => {
+    var clientSocket
+    var audioCtx
+    var mediaStream
+    var audioRec
 
-
-  async recorderWithoutCanvas () {
-
-    if (!navigator.mediaDevices) {
-      console.log('browser doesn\'t support')
-      this.setState({browserSupported:false})
-      this.props.setState({
-        transcriptionAISG:"Media input is not support on this browser",
-        transcriptionGoogle:"Media input is not support on this browser",
+    // initialize socket to backend for voice
+    const initSockets = () => {
+      clientSocket = io(props.backendURL, {
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        // reconnectionAttempts: Infinity
+        reconnectionAttempts: 2
+      })
+      clientSocket.on('connect', () => {
+        console.log("Socket connected!")
+        setSocket(clientSocket)
       })
 
-    } else if (navigator.mediaDevices.getUserMedia) {
-
-      console.log('getUserMedia supported.')
-
-      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-      let source
-
-      const constraints = { audio: true }
-      try {
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-
-        source = this.audioCtx.createMediaStreamSource(this.mediaStream)
-        this.audioStream = source
-        window.source = source
-
-        // -------IMPORTANT------
-        // eslint-disable-next-line no-undef
-        const recorder = new Recorder(source, { workerPath: '/recorderWorker.js' })
-        this.setState({
-          recorder
-        })
-      } catch (e) {
-        console.log('The following error occured: ' + e)
-        // this.$emit('onError', e.toString())
-        this.setState({browserSupported:false})
-        this.props.setState({
-          transcriptionAISG:"Media input is not possible",
-          transcriptionGoogle:"Media input is not possible",
-        })
-      }
-    } else {
-      // this.$emit('onError', 'getUserMedia not supported on your browser!')
-      console.log('getUserMedia not supported on your browser!')
-    }
-  }
-
-  async prepare () {
-    this.canvas = document.querySelector('.visualizer')
-    this.canvasCtx = this.canvas.getContext('2d')
-    // const intendedWidth = document.querySelector('.visualizer-container').clientWidth
-    const intendedWidth = 500
-    this.canvas.setAttribute('width', intendedWidth)
-    this.canvas.setAttribute('height', 200)
-
-    if (intendedWidth / 2 < 500) {
-      this.canvas.style.width = intendedWidth + 'px'
-    } else {
-      this.canvas.style.width = (intendedWidth / 2) + 'px'
-    }
-
-    this.canvas.style.height = '100px'
-
-    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-    let source
-
-    this.analyser = this.audioCtx.createAnalyser()
-    this.analyser.minDecibels = -90
-    this.analyser.maxDecibels = -10
-    this.analyser.smoothingTimeConstant = 0.85
-
-    const distortion = this.audioCtx.createWaveShaper()
-    const gainNode = this.audioCtx.createGain()
-    const biquadFilter = this.audioCtx.createBiquadFilter()
-    const convolver = this.audioCtx.createConvolver()
-
-    if (!navigator.mediaDevices) {
-      console.log('browser doesn\'t support')
-      // this.$emit('onError', 'Your browser doesn\'t support audio recorder. Make sure you grant permission for recording audio and your browser is running with HTTPS')
-    }
-
-    if (navigator.mediaDevices.getUserMedia) {
-      console.log('getUserMedia supported.')
-      const constraints = { audio: true }
-      try {
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
-
-        source = this.audioCtx.createMediaStreamSource(this.mediaStream)
-        this.audioStream = source
-        // Firefox loses the audio input stream every five seconds
-        // To fix added the input to window.source
-        window.source = source
-        source.connect(distortion)
-        distortion.connect(biquadFilter)
-        biquadFilter.connect(gainNode)
-        convolver.connect(gainNode)
-        gainNode.connect(this.analyser)
-        this.analyser.connect(this.audioCtx.destination)
-        this.audioCtx.resume()
-        this.visualize()
-
-        // -------IMPORTANT------
-        // eslint-disable-next-line no-undef
-        const recorder = new Recorder(source, { workerPath: '/recorderWorker.js' })
-        this.setState({
-          recorder
-        })
-      } catch (e) {
-        console.log('The following error occured: ' + e)
-        // this.$emit('onError', e.toString())
-      }
-    } else {
-      // this.$emit('onError', 'getUserMedia not supported on your browser!')
-      console.log('getUserMedia not supported on your browser!')
-    }
-  }
-
-  visualize () {
-    this.analyser.fftSize = 32768
-    this.bufferLength = this.analyser.fftSize
-    this.dataArray = new Uint8Array(this.bufferLength)
-
-    this.canvasCtx.clearRect(0, 0, this.canvas.width, this.canvas.height)
-
-    this.draw()
-  }
-
-  draw = () => {
-    this.drawVisual = requestAnimationFrame(this.draw)
-
-    this.analyser.getByteTimeDomainData(this.dataArray)
-
-    this.canvasCtx.fillStyle = '#f7fafc'
-    this.canvasCtx.fillRect(0, 0, this.canvas.width, this.canvas.height)
-
-    this.canvasCtx.lineWidth = 2
-    this.canvasCtx.strokeStyle = '#007aff'
-
-    this.canvasCtx.beginPath()
-
-    const sliceWidth = this.canvas.width * 1.0 / this.bufferLength
-    let x = 0
-
-    for (let i = 0; i < this.bufferLength; i++) {
-      const v = this.dataArray[i] / 128.0
-      const y = v * this.canvas.height / 2
-
-      if (i === 0) {
-        this.canvasCtx.moveTo(x, y)
-      } else {
-        this.canvasCtx.lineTo(x, y)
-      }
-
-      x += sliceWidth
-    }
-
-    this.canvasCtx.lineTo(this.canvas.width, this.canvas.height / 2)
-    this.canvasCtx.stroke()
-  }
-
-  // -------IMPORTANT------
-  // Function below
-  start = async () => {
-
-    try {
-      if (this.props.isBusy) {
-        return
-      }
-
-      this.props.reset()
-
-      await axios.post(`${this.props.backendUrl}/stream/google`, {
-        socketid: this.props.socket.id,
-      })
-      await axios.post(`${this.props.backendUrl}/stream/aisg`, {
-        socketid: this.props.socket.id,
+      clientSocket.on("stream-ready-aisg", () => {
+        setIsStreamOpenAISG(true)
       })
 
-      // Start recording
-      this.setState({start:true})
-      this.state.recorder.record()
-      this.props.setState({
-        isBusy: true,
-      })
-      this.setState({
-        service: "",
-        isRecording: true,
+      clientSocket.on("stream-ready-google", () => {
+        setIsStreamOpenGoogle(true)
       })
 
-      const recordInterval = setInterval(() => {
-        this.state.recorder.export16kMono((blob) => {
-          if (this.props.isSocketReady) {
-            this.props.socket.emit('stream-input', blob)
-          }
-          this.state.recorder.clear()
-        }, 'audio/x-raw')
-      }, 250)
-
-      // set a limit on how long user can speak for
-      const maxTimeout = setTimeout(() => {
-        if (this.state.start) {
-          this.stop()
-          setTimeout(() => {
-            this.props.setState({
-              partialResultAISG: "Stopped: 2 minute maximum stream duration reached",
-              partialResultGoogle: "Stopped: 2 minute maximum stream duration reached",
-            })
-          },1000)
-          // delay in set text to allow buffer for last message from backend
+      clientSocket.on("stream-data-google", data => {
+        if (data.results[0].isFinal) {
+          setPartialResultGoogle("")
+          setTranscriptionGoogle( prev => (prev + data.results[0].alternatives[0].transcript) )
         }
-      }, 120000)
-      // 2 min maximum as google api will raise error if streaming for too long
-
-      this.setState({
-        recordInterval,
-        maxTimeout
-      })
-
-    } catch (err) {
-      console.log(err)
-    }
-  }
-
-  // -------IMPORTANT------
-  // Function below
-  stop = () => {
-    this.setState({start:false})
-
-    clearInterval(this.state.recordInterval)
-    clearTimeout(this.state.maxTimeout)
-    // Stop recording
-    if (this.state.recorder) {
-      this.state.recorder.stop()
-      this.setState({
-        isRecording: false,
-      })
-      // Push the remaining audio to the server
-      this.state.recorder.export16kMono((blob) => {
-        if (this.props.isSocketReady) {
-          this.props.socket.emit('stream-stop', blob)
+        else {
+          setPartialResultGoogle( "[..." + data.results[0].alternatives[0].transcript + "]" )
         }
-        this.state.recorder.clear()
-      }, 'audio/x-raw')
-    } else {
-      this.$emit('onError', 'Recorder undefined')
+      })
+
+      clientSocket.on("stream-data-aisg", data => {
+        if (data.result.final) {
+          setPartialResultAISG("")
+          setTranscriptionAISG( prev => (prev.slice(0,-1) + ' ' + data.result.hypotheses[0].transcript) )
+        }
+        else {
+          setPartialResultAISG( "[..." + data.result.hypotheses[0].transcript + "]" )
+        }
+      })
+
+      clientSocket.on("stream-close-aisg", () => {
+        setIsStreamOpenAISG(false)
+      })
+
+      clientSocket.on("stream-close-google", () => {
+        setIsStreamOpenGoogle(false)
+      })
     }
-  }
 
-  // -------IMPORTANT------
-  // Function below
-  cancel = () => {
-    // Stop the regular sending of audio (if present)
-    clearInterval(this.state.recordInterval)
-    clearTimeout(this.state.maxTimeout)
+    // initialize recorder for voice
+    const initializeRecorder = async () => {
 
-    if (this.state.recorder) {
-      this.state.recorder.stop()
-      this.state.recorder.clear()
-      if (this.props.isSocketReady) {
-        this.props.socket.emit('stream-cancel')
+      if (!navigator.mediaDevices) {
+        console.log("Browser does not support navigator.mediaDevices")
+        setBrowserSupported(false)
+        setTranscriptionAISG("Media input not supported.")
+        setTranscriptionGoogle("Media input not supported.")
+      }
+      else if (navigator.mediaDevices.getUserMedia) {
+        console.log("getUserMedia supported.")
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+
+        const constraints = { audio: true }
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
+
+          let source = audioCtx.createMediaStreamSource(mediaStream)
+          window.source = source
+
+          // eslint-disable-next-line no-undef
+          audioRec = new Recorder(source, {workerPath: '/recorderWorker.js'})
+          setAudioRecorder(audioRec)
+        }
+        catch (e) {
+          console.log(e)
+          setBrowserSupported(false)
+          setTranscriptionAISG("Media input not possible.")
+          setTranscriptionGoogle("Media input not possible.")
+        }
+      }
+      else {
+        console.log("getUserMedia not supported on this browser.")
       }
     }
+
+    initSockets()
+    initializeRecorder()
+
+    return ( () => {
+      if (clientSocket) {
+        clientSocket.emit("stream-cancel")
+        clientSocket.disconnect()
+      }
+      if (mediaStream) {
+        let track = mediaStream.getTracks()[0]
+        track.stop()
+        audioCtx.close()
+      }
+      audioRec.stop()
+      audioRec.clear()
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+
+  const startRecording = async () => {
+
+    resetSpeechInputs()
+
+    await axios.post(`${props.backendURL}/stream/google`, {
+      socketid: socket.id,
+    })
+    await axios.post(`${props.backendURL}/stream/aisg`, {
+      socketid: socket.id,
+    })
+
+    setIsRecording(true)
+    audioRecorder.record()
+
+    setService("")
+
+    setRecordInterval( setInterval( () => {
+      audioRecorder.export16kMono( blob => {
+        if (socket) {
+          socket.emit("stream-input", blob)
+        }
+        audioRecorder.clear()
+      }, "audio/x-raw")
+    }, 250))
+
+    setRecordTimeout( setTimeout( () => {
+      if (isRecording) {
+        stopRecording()
+        setTimeout(() => {
+          setPartialResultAISG("Stopped: 2 minute maximum stream duration reached.")
+          setPartialResultGoogle("Stopped: 2 minute maximum stream duration reached.")
+        }, 1000)
+        // delay in set text to allow buffer for last message from backend
+      }
+    }, 120000))
+    // 2 min maximum as google api will raise error if streaming for too long
   }
 
-  handleChange(e){
-    let option = e.target.value
-    this.setState({service: option})
+  const stopRecording = () => {
 
+    setIsRecording(false)
+    clearInterval(recordInterval)
+    setRecordInterval(null)
+    clearTimeout(recordTimeout)
+    setRecordTimeout(null)
+
+    audioRecorder.stop()
+    audioRecorder.export16kMono( blob => {
+      if (socket) {
+        socket.emit('stream-stop', blob)
+      }
+      audioRecorder.clear()
+    }, 'audio/x-raw')
   }
 
-  sendTranscription(){
-    if (this.state.service === "aisg"){
-      this.props.setState({
-        input: this.props.transcriptionAISG,
-      })
+  const sendTranscription = () => {
+    if (service === "aisg"){
+      props.setInput(transcriptionAISG)
+      props.getResponses(transcriptionAISG)
     }
-    else if (this.state.service === "google"){
-      this.props.setState({
-        input: this.props.transcriptionGoogle,
-      })
+    else if (service === "google"){
+      props.setInput(transcriptionGoogle)
+      props.getResponses(transcriptionGoogle)
     }
-
-    // set timeout so that handleClick will use updated input rather than prevState input
-    setTimeout( () => {
-      this.props.handleClick()
-    }, 100)
   }
 
-  render () {
-    return (
-      <Grid item container spacing={2} direction='column'>
+  const resetSpeechInputs = () => {
+    setPartialResultAISG("")
+    setPartialResultGoogle("")
+    setTranscriptionAISG("")
+    setTranscriptionGoogle("")
+  }
 
-        <Grid item>
-          <FormControl fullWidth variant="outlined">
-          <TextField
-          style={textField}
-          id="aisgResults"
-          label="AISG Speech Labs"
-          value={this.props.transcriptionAISG + ' ' + this.props.partialResultAISG}
-          InputProps={{
-            readOnly: true,
-          }}
-          variant="filled"
-          name="input"
-          multiline
-          />
+  return (
+    <Grid item container spacing={2} direction='column'>
 
-          <TextField
-          style={textField}
-          id="googleResults"
-          label="Google Cloud Speech-to-Text"
-          value={this.props.transcriptionGoogle + ' ' + this.props.partialResultGoogle}
-          InputProps={{
-            readOnly: true,
-          }}
-          variant="filled"
-          name="input"
-          multiline
-          />
+      <Grid item>
+        <FormControl fullWidth variant="outlined">
+        <TextField
+        id="aisgResults"
+        label="AISG Speech Labs"
+        value={transcriptionAISG ? transcriptionAISG + ' ' + partialResultAISG : ""}
+        InputProps={{readOnly: true}}
+        InputLabelProps={{shrink: true}}
+        variant="filled"
+        multiline
+        placeholder={isRecording && !isStreamOpenAISG ? "Not connected." : ""}
+        />
 
-          {this.state.start &&
-            <LinearProgress color="secondary" />}
+        <TextField
+        id="googleResults"
+        label="Google Cloud Speech-to-Text (Enhanced Model)"
+        value={transcriptionGoogle ? transcriptionGoogle + ' ' + partialResultGoogle : ""}
+        InputProps={{readOnly: true}}
+        InputLabelProps={{shrink: true}}
+        variant="filled"
+        multiline
+        placeholder={isRecording && !isStreamOpenGoogle ? "Not connected." : ""}
+        />
 
-          <ButtonGroup variant="contained">
-            <Button
-            style={buttonStyle}
-            color="primary"
-            onClick={this.start}
-            disabled={!this.state.browserSupported || this.props.isBusy}
-            >Start
-            </Button>
-            <Button
-            style={buttonStyle}
-            color="secondary"
-            onClick={this.stop}
-            disabled={!this.state.browserSupported || !this.state.isRecording}
-            >Stop
-            </Button>
-          </ButtonGroup>
-          </FormControl>
-        </Grid>
+        {isRecording &&
+          <LinearProgress color="secondary" />}
 
-
-        <Grid item>
-        <Typography variant="h5">
-          Select transcription to use:
-        </Typography>
-        <RadioGroup aria-label="speechService" name="speechService" value={this.state.service} onChange={this.handleChange} row>
-          <FormControlLabel
-          disabled={this.state.start && this.state.service === 'google'}
-          value="aisg"
-          label="AISG"
-          control={<Radio color="primary" />}
-          />
-          <FormControlLabel
-          disabled={this.state.start && this.state.service === 'aisg'}
-          value="google"
-          label="Google"
-          control={<Radio color="primary" />}
-          />
-        </RadioGroup>
-        <Button onClick={this.sendTranscription}
-        variant="contained" color="primary" disabled={this.state.service==="" || this.props.isBusy}>
-        Submit
-        </Button>
-        </Grid>
-
-
+        <ButtonGroup variant="contained">
+          <Button
+          style={{width:'50%'}}
+          color="primary"
+          onClick={startRecording}
+          disabled={!browserSupported || isRecording}
+          >Start
+          </Button>
+          <Button
+          style={{width:'50%'}}
+          color="secondary"
+          onClick={stopRecording}
+          disabled={!browserSupported || !isRecording}
+          >Stop
+          </Button>
+        </ButtonGroup>
+        </FormControl>
       </Grid>
-    )
-  }
+
+
+      <Grid item>
+      <Typography variant="h5">
+        Select transcription to use:
+      </Typography>
+      <RadioGroup row aria-label="speechService" name="speechService"
+      value={service}
+      onChange={(e)=>{
+        setService(e.target.value)
+      }} >
+        <FormControlLabel
+        disabled={isRecording}
+        value="aisg"
+        label="AISG"
+        control={<Radio color="primary" />}
+        />
+        <FormControlLabel
+        disabled={isRecording}
+        value="google"
+        label="Google Premium"
+        control={<Radio color="primary" />}
+        />
+      </RadioGroup>
+      <Button onClick={sendTranscription}
+      variant="contained" color="primary" disabled={service==="" || isRecording}>
+      Submit
+      </Button>
+      </Grid>
+
+
+    </Grid>
+  )
 }

@@ -1,0 +1,15 @@
+.docker
+.dockerignore
+coverage
+dist
+node_modules
+test
+.env*
+.eslintrc.js
+.prettierrc
+Dockerfile
+README.md
+LICENSE
+nest-cli.json
+.DS_Store
+jest.config.js

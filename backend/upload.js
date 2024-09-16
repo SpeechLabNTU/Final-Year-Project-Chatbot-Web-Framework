@@ -4,7 +4,7 @@ const multer = require('multer')
 const path = require('path')
 const crypto = require('crypto')
 
-const storage = multer.diskStorage({
+const storageAudio = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'storage/')
   },
@@ -16,6 +16,23 @@ const storage = multer.diskStorage({
     }
   }
 })
-const upload = multer({ storage: storage })
+
+const storageCsv = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'storage/')
+  },
+  filename: (req, file, cb) => {
+    if (['.csv'].includes(path.extname(file.originalname))) {
+      cb(null, `${crypto.randomBytes(3).toString('hex')}${Date.now()}${path.extname(file.originalname)}`)
+    } else {
+      return cb(new Error('File type is not supported! Only CSV are allowed'))
+    }
+  }
+})
+
+const uploadAudio = multer({ storage: storageAudio })
+const uploadCsv = multer({ storage: storageCsv })
+
+const upload = {audio: uploadAudio, csv: uploadCsv}
 
 module.exports = upload

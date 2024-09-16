@@ -4,6 +4,10 @@ node_modules/
 #backend
 gcloud/
 keys/
+data/
+
+#intent-management
+dist/
 
 #dataConstruction directory
 permutations/
@@ -14,10 +18,17 @@ training_data
 
 #python directory
 __pycache__/
+bin/
+!backend/bin/
+include/
 lib/
+share/
 others/
+pyvenv.cfg
+lib64
 
 #optional
 .env
 .vscode/
+.idea/
 .DS_Store

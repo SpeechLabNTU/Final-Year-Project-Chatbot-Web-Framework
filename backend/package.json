@@ -1,5 +1,5 @@
 {
-  "name": "online-asr-backend",
+  "name": "chatbot-backend",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -7,36 +7,42 @@
     "start": "NODE_ENV=production node ./bin/www"
   },
   "dependencies": {
-    "@google-cloud/speech": "^3.6.0",
-    "axios": "^0.19.0",
+    "@google-cloud/dialogflow": "^3.3.0",
+    "@google-cloud/speech": "^4.1.4",
+    "axios": "^0.21.1",
     "check-word": "^1.1.0",
     "child_process": "^1.0.2",
-    "cookie-parser": "~1.4.3",
+    "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
-    "csv-parser": "^2.3.1",
+    "csv-parser": "^2.3.3",
+    "csv-writer": "^1.6.0",
     "debug": "~2.6.9",
-    "dialogflow": "^0.12.0",
-    "dotenv": "^8.2.0",
+    "dependencies": "0.0.1",
+    "dotenv": "^8.6.0",
     "ejs": "~2.5.7",
-    "express": "~4.16.0",
+    "express": "^4.17.1",
     "fluent-ffmpeg": "^2.1.2",
+    "form-data": "^3.0.0",
+    "html-to-text": "^5.1.1",
     "http-errors": "~1.6.2",
     "lda": "^0.2.0",
+    "mongoose": "^5.12.8",
     "morgan": "~1.9.0",
     "multer": "^1.4.2",
     "node-record-lpcm16": "^1.0.1",
-    "request": "^2.88.0",
-    "selenium-webdriver": "^4.0.0-alpha.5",
-    "socket.io": "^2.2.0",
-    "websocket": "^1.0.31"
+    "selenium-webdriver": "^4.0.0-alpha.7",
+    "socket.io": "^2.4.1",
+    "uuid": "^8.3.0",
+    "websocket": "^1.0.32",
+    "xml2js": "^0.4.23"
   },
   "devDependencies": {
-    "eslint": "^6.3.0",
-    "eslint-config-standard": "^14.1.0",
-    "eslint-plugin-import": "^2.18.2",
+    "eslint": "^6.8.0",
+    "eslint-config-standard": "^14.1.1",
+    "eslint-plugin-import": "^2.22.0",
     "eslint-plugin-node": "^9.2.0",
     "eslint-plugin-promise": "^4.2.1",
     "eslint-plugin-standard": "^4.0.1",
-    "nodemon": "^1.19.1"
+    "nodemon": "^2.0.4"
   }
 }
